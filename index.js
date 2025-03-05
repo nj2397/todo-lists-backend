@@ -1,4 +1,4 @@
-require('dotenv').process;
+require('dotenv').config({ path: '/etc/.env' });
 const express = require('express')
 const cors = require ('cors')
 const mongoose = require('mongoose')
