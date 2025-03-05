@@ -1,6 +1,8 @@
-
+require('dotenv').config();
+const { OAuth2Client } = require('google-auth-library');
 const { validate } = require("../models/addTodo.model");
 const {
+    googleOAuthLogin,
     loginAuth,
     signupAuth,
     addATodo,
@@ -11,9 +13,59 @@ const {
     searchTodos
 } = require("../service/addATodo.service");
 const { validateToken } = require("../utils/resp.utils");
+const { default: axios } = require('axios');
 
 
+const googleLogin = async (req, res) => {
+    try {
+        // console.log('request received --> ', process.env.CLIENT_ID, process.env.CLIENT_SECRET)
+        const oAuth2Client = new OAuth2Client(
+            process.env.CLIENT_ID,
+            process.env.CLIENT_SECRET,
+            'postmessage'
+        )
 
+        const { tokens } = await oAuth2Client.getToken(req.body.code);
+        // console.log('googleAPItokens --> ', tokens)
+
+        if (tokens) {
+            const { access_token, id_token } = tokens;
+
+            const profileResponse = await axios.get('https://www.googleapis.com/oauth2/v1/userinfo', {
+                headers: { Authorization: `Bearer ${access_token}` }
+            });
+
+            // console.log('profileResponse --> ', profileResponse)
+            let userSave = await googleOAuthLogin(profileResponse.data)
+            console.log('userSave --> ', userSave)
+
+            if (userSave)
+                return res.status(200).json({
+                    status: 200,
+                    message: 'User has been saved',
+                    data: {
+                        userID: userSave._doc.userID,
+                        token: userSave.token
+                    }
+            })
+
+            return res.status(422).json({
+                status: 422,
+                message: 'Failed to save the user data'
+            })
+        } else
+            return res.status(500).json({
+                status: 500,
+                message: "Failed to fetch ID"
+            })
+
+    } catch (error){
+        return res.status(500).json({
+            status: 500,
+            message: error.message
+        })
+    }
+}
 
 const login = async (req, res) => {
     try {
@@ -181,6 +233,8 @@ const searchTodo = async (req, res) => {
             })
         }
 
+        console.log('req.body --> ', req.body)
+
         const response = await searchTodos(req.body);
 
         if (response) {
@@ -200,6 +254,7 @@ const searchTodo = async (req, res) => {
 
 
 module.exports = {
+    googleLogin,
     login,
     signup,
     listTodos,

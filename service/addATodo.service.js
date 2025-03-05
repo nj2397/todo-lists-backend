@@ -1,11 +1,53 @@
 const bcrypt = require('bcrypt')
 const todoLists = require("../models/addTodo.model");
 const usersLists = require("../models/users.model");
+const googleOAuthUsers = require("../models/googleSignedUpUsers.model")
 const { 
     generateRandomNumber,
     tokenSignup,
 } = require("../utils/resp.utils");
 
+
+
+const googleOAuthLogin = async (body) => {
+    try {
+        const {
+            name,
+            email,
+            verified_email
+        } = body
+
+        const googleOAuthExistingUser = await googleOAuthUsers.findOne({ email })
+
+        if (googleOAuthExistingUser) {
+            const token = tokenSignup({ email, name })
+            console.log('googleOAuthExistingUser -->', googleOAuthExistingUser)
+            return {...googleOAuthExistingUser, token};
+        }
+
+        const userID = generateRandomNumber();
+
+        const googleOAuthResponse = await new googleOAuthUsers({
+            userID,
+            name,
+            email,
+            verified: verified_email
+        }).save({ validateSaveBeforeTrue: true })
+
+        console.log('googleOAuthResponse -->', googleOAuthResponse)
+
+        if (googleOAuthResponse) {
+            const token = tokenSignup({ email, name })
+            // console.log('token -->', token)
+            // googleOAuthResponse.token = token
+            // console.log('googleOAuthResponse -->', googleOAuthResponse)
+            return {...googleOAuthResponse, token};
+        }
+
+    } catch (err) {
+        return err;
+    }
+}
 
 const loginAuth = async(body) => {
     try {
@@ -171,23 +213,34 @@ const updateATodo = async (body) => {
 
 
 const searchTodos = async (body) => {
-    const result = await todoLists.find({
-        $and: [
-            { userID: body.id },
-            { title: {
-                $regex: body.title,
-                $options: 'i'
-            }}
-        ]
-    }) 
 
-    if (result) 
-        return result;  
-    else return null;
+    console.log('body --> ', body)
+    const pipeline = [
+        { $match: { userID: body.id } },
+        { 
+          $facet: {
+            results: [
+              { $match: { title: { $regex: body.title, $options: 'i' } } }, 
+              { $sort: { date: 1, time: 1 } },
+              { $skip: 0 }
+            ],
+            totalCount: [{ $count: "count" }]
+          }
+        }
+      ];
+      
+      const aggregationResult = await todoLists.aggregate(pipeline);      
+      const result = aggregationResult[0].results;
+      const count = aggregationResult[0].totalCount[0] ? aggregationResult[0].totalCount[0].count : 0;
+
+      console.log('result, count ', result, count)
+      
+      return { result, count };
 }
 
 
 module.exports = {
+    googleOAuthLogin,
     loginAuth,
     checkUser,
     signupAuth,
